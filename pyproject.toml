@@ -3,22 +3,14 @@ name = "speech-course"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
-    "arpa>=0.1.0b4",
-    "g2p-en>=2.1.0",
-    "ipywidgets>=8.1.8",
+    "datasets>=4.4.1",
+    "jiwer>=4.0.0",
     "librosa>=0.11.0",
-    "matplotlib>=3.10.7",
-    "nltk>=3.9.2",
-    "numpy>=2.3.4",
-    "pandas>=2.3.3",
-    "requests>=2.32.5",
-    "scipy>=1.16.3",
-    "seaborn>=0.13.2",
-    "sentencepiece>=0.2.1",
+    "soundfile>=0.13.1",
     "torch>=2.9.1",
     "torchaudio>=2.9.1",
-    "torchcodec>=0.8.1",
-    "tqdm>=4.67.1",
+    "torchvision>=0.24.1",
+    "transformers>=4.57.3",
 ]
