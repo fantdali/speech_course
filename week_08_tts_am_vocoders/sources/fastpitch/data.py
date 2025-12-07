@@ -11,10 +11,13 @@ import pandas as pd
 import parselmouth
 import soundfile as sf
 import torch
-from torch.utils.data import DataLoader
-
-from sources.fastpitch.common.utils import ToDeviceMixin, convert_to_tensor, pad_tensor_list
+from sources.fastpitch.common.utils import (
+    ToDeviceMixin,
+    convert_to_tensor,
+    pad_tensor_list,
+)
 from sources.fastpitch.sampled_array import SampledArray, resample
+from torch.utils.data import DataLoader
 
 
 def path_to_audio(r, data_dir: str) -> str:

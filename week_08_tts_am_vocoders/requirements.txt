@@ -9,4 +9,6 @@ torch
 torchaudio
 torchmetrics
 tqdm
+ipywidgets
+g2p_en
 transformers

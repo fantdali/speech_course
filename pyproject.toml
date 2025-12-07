@@ -6,8 +6,10 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "datasets>=4.4.1",
+    "g2p-en>=2.1.0",
     "jiwer>=4.0.0",
     "librosa>=0.11.0",
+    "matplotlib>=3.10.7",
     "soundfile>=0.13.1",
     "torch>=2.9.1",
     "torchaudio>=2.9.1",
