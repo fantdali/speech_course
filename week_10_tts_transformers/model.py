@@ -12,19 +12,27 @@ class SubDecoder(nn.Module):
         self.n_codes, self.n_codebooks = n_codes, n_codebooks
         self.d_model = d_model
 
-        layer = nn.TransformerEncoderLayer(d_model=d_model, nhead=4, dim_feedforward=256, batch_first=True)
+        layer = nn.TransformerEncoderLayer(
+            d_model=d_model, nhead=4, dim_feedforward=256, batch_first=True
+        )
         self.decoder = nn.TransformerEncoder(encoder_layer=layer, num_layers=2)
         self.out_proj = nn.Linear(in_features=d_model, out_features=n_codes)
 
-        self.codes_embedder = nn.Embedding(num_embeddings=n_codes, embedding_dim=d_model)
-        self.positional_encoding = nn.Embedding(num_embeddings=n_codebooks, embedding_dim=d_model)
+        self.codes_embedder = nn.Embedding(
+            num_embeddings=n_codes, embedding_dim=d_model
+        )
+        self.positional_encoding = nn.Embedding(
+            num_embeddings=n_codebooks, embedding_dim=d_model
+        )
 
-        self.codes_positional_encoding = nn.Embedding(num_embeddings=n_codebooks + 1, embedding_dim=d_model)
+        self.codes_positional_encoding = nn.Embedding(
+            num_embeddings=n_codebooks + 1, embedding_dim=d_model
+        )
 
     def forward(
         self,
-        emb_sequence, # [B, L, d]
-        codes_sequence, # [B, L, N]
+        emb_sequence,  # [B, L, d]
+        codes_sequence,  # [B, L, N]
     ):
         """
         emb_sequence: FloatTensor of size [batch, codes_len, d_model]
@@ -37,7 +45,7 @@ class SubDecoder(nn.Module):
         device = emb_sequence.device
 
         # Calculate the embeddings of each token in codec
-        codes_embeddings = self.codes_embedder(codes_sequence) # [B, L, N, d]
+        codes_embeddings = self.codes_embedder(codes_sequence)  # [B, L, N, d]
         B, L, N, d = codes_embeddings.shape
 
         # Flattening batch and codes_len dimensions, for proper usage in transformer decoder
@@ -55,7 +63,7 @@ class SubDecoder(nn.Module):
         # Calculate the embeddings of each token in codec
         embeddings = self.decoder(
             src=src,
-            mask=nn.Transformer.generate_square_subsequent_mask(N + 1, device=device)
+            mask=nn.Transformer.generate_square_subsequent_mask(N + 1, device=device),
         )
         # Projecting embedding to the number of codes
         # You can further use softmax to get the probabilities of each code, but not inside this function
@@ -65,7 +73,7 @@ class SubDecoder(nn.Module):
     @torch.no_grad()
     def autoregressive_sampling(
         self,
-        embedding, # [B, d]
+        embedding,  # [B, d]
         sampling_fn: Callable = lambda x: x.argmax(dim=-1),
     ):
         """
@@ -83,9 +91,20 @@ class SubDecoder(nn.Module):
         assert B == 1, "Batch size should be 1"
 
         # Your code here
-        raise NotImplementedError("TODO: assignment")
-        # ^^^^^^^^^^^^^^
+        # raise NotImplementedError("TODO: assignment")
+        emb_sequence = embedding.unsqueeze(dim=1)  # [B, 1, d]
+        codes_sequence = torch.empty(
+            B, 1, 0, device=device, dtype=torch.long
+        )  # [B, 1, 0]
 
+        for _ in range(self.n_codebooks):
+            logits = self.forward(emb_sequence, codes_sequence)  # [B, 1, k+1, n_codes]
+            next_logits = logits[:, :, -1, :]  # [B, 1, n_codes]
+            next_code = sampling_fn(next_logits).unsqueeze(1)  # [B, 1, 1]
+            codes_sequence = torch.cat(
+                [codes_sequence, next_code], dim=-1
+            )  # [B, 1, k+1]
+        # ^^^^^^^^^^^^^^
 
         return codes_sequence
 
@@ -94,17 +113,27 @@ class EncoderDecoder(nn.Module):
     def __init__(self, d_model, n_phonemes, n_codes, n_codebooks):
         super().__init__()
 
-        self.phoneme_embedding = nn.Embedding(num_embeddings=n_phonemes, embedding_dim=d_model)
+        self.phoneme_embedding = nn.Embedding(
+            num_embeddings=n_phonemes, embedding_dim=d_model
+        )
 
         assert d_model % n_codebooks == 0, f"{d_model=} {n_codebooks=}"
-        self.codes_embedding = nn.ModuleList([
-            nn.Embedding(num_embeddings=n_codes, embedding_dim=d_model // n_codebooks)
-            for _ in range(n_codebooks)
-        ])
+        self.codes_embedding = nn.ModuleList(
+            [
+                nn.Embedding(
+                    num_embeddings=n_codes, embedding_dim=d_model // n_codebooks
+                )
+                for _ in range(n_codebooks)
+            ]
+        )
 
-        self.phones_positional_encoding = nn.Embedding(num_embeddings=1000, embedding_dim=d_model)
+        self.phones_positional_encoding = nn.Embedding(
+            num_embeddings=1000, embedding_dim=d_model
+        )
         self.n_pos_embs = 2300
-        self.codes_positional_encoding = nn.Embedding(num_embeddings=self.n_pos_embs, embedding_dim=d_model)
+        self.codes_positional_encoding = nn.Embedding(
+            num_embeddings=self.n_pos_embs, embedding_dim=d_model
+        )
 
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
@@ -129,11 +158,11 @@ class EncoderDecoder(nn.Module):
 
     def forward(
         self,
-        phones, # [B, l]
-        phones_mask, # [B, l]
-        codes, # [B, L, N]
-        codes_mask, # [B, L]
-        speaker_embs, # [B, d]
+        phones,  # [B, l]
+        phones_mask,  # [B, l]
+        codes,  # [B, L, N]
+        codes_mask,  # [B, L]
+        speaker_embs,  # [B, d]
     ):
         """
         phones: LongTensor of size [batch, phones_len]
@@ -146,12 +175,14 @@ class EncoderDecoder(nn.Module):
         Then applies tranformer decoder in teacher-forcing regime.
         This method returns embeddings for further usage in SubDecoder.
         """
-        device=phones.device
+        device = phones.device
 
         # Embedding phonemes and concatenating with speaker embedding
         phone_embs = self.phoneme_embedding(phones)
         phone_embs = torch.cat((speaker_embs.unsqueeze(dim=1), phone_embs), dim=1)
-        mask_complement = torch.ones(phones.shape[0], 1, device=device, dtype=torch.bool)
+        mask_complement = torch.ones(
+            phones.shape[0], 1, device=device, dtype=torch.bool
+        )
         phones_mask = torch.cat((mask_complement, phones_mask), dim=1)
 
         # Simple position encoding for phonemes
@@ -160,26 +191,31 @@ class EncoderDecoder(nn.Module):
         phones_inp = phone_embs + phones_PE
 
         # Creating embeddings for each input codec, and concatenating them
-        codes_embs = [emb_layer(codes[:, :, idx]) for idx, emb_layer in enumerate(self.codes_embedding)]
+        codes_embs = [
+            emb_layer(codes[:, :, idx])
+            for idx, emb_layer in enumerate(self.codes_embedding)
+        ]
         codes_embs = torch.cat(codes_embs, dim=2)
 
         # Simple position encoding for codecs sequence
         codes_range = torch.arange(codes.shape[1], device=device).unsqueeze(dim=0)
-        codes_range = torch.clamp(codes_range, 0, self.n_pos_embs - 1) # Needed to avoid out of range errors
+        codes_range = torch.clamp(
+            codes_range, 0, self.n_pos_embs - 1
+        )  # Needed to avoid out of range errors
         codes_PE = self.codes_positional_encoding(codes_range)
         codes_inp = codes_embs + codes_PE
 
         # Applying encoder, which calculates representations of phonemes
         phonemes_encoded = self.encoder(
-            src=phones_inp,
-            mask=None,
-            src_key_padding_mask=~phones_mask
+            src=phones_inp, mask=None, src_key_padding_mask=~phones_mask
         )
         # Applying decoder, which calculates representations, which will be further used for subdecoder to predict codecs
         embeddings = self.decoder(
             tgt=codes_inp,
             memory=phonemes_encoded,
-            tgt_mask=nn.Transformer.generate_square_subsequent_mask(codes.shape[1], device=device).bool(),
+            tgt_mask=nn.Transformer.generate_square_subsequent_mask(
+                codes.shape[1], device=device
+            ).bool(),
             memory_mask=None,
             tgt_key_padding_mask=~codes_mask,
             memory_key_padding_mask=~phones_mask,
@@ -210,11 +246,11 @@ class TTSTransformer(nn.Module):
 
     def forward(
         self,
-        phones, # [B, l]
-        phones_mask, # [B, l]
-        codes, # [B, L, N]
-        codes_mask, # [B, L]
-        speaker_embs, # [B, ]
+        phones,  # [B, l]
+        phones_mask,  # [B, l]
+        codes,  # [B, L, N]
+        codes_mask,  # [B, L]
+        speaker_embs,  # [B, ]
     ):
         """
         phones: LongTensor of size [batch, phones_len]
@@ -223,7 +259,7 @@ class TTSTransformer(nn.Module):
         codes_mask: BoolTensor of size [batch, codes_len]
         speaker_embs: FloatTensor of size [batch, d_model]
         return: logits FloatTensor of size [batch, codes_len, n_codes, n_codes_in_codebooks]
-        
+
         Method applies bioemb_linear, encoder, decoder and subdecoder.
         Works in teacher-forcing regime.
         """
@@ -247,8 +283,8 @@ class TTSTransformer(nn.Module):
     @torch.no_grad()
     def autoregressive_sampling(
         self,
-        phones, # [B, l]
-        speaker_embs, # [B]
+        phones,  # [B, l]
+        speaker_embs,  # [B]
         max_size: int = 1000,
         start_token: int = 161,
         end_token: int = 160,
@@ -262,7 +298,7 @@ class TTSTransformer(nn.Module):
         start_token: int - the start token index. The first codec vector in input codes sequence should be initialized with this value.
         end_token: int - the end token index. If the model predicts this token ,
         sampling_fn: Callable FloatTensor of size [*, n_codes] -> LongTensor of size [*]
-        
+
         The batch_size here is supposed to be 1.
         Implements the same idea as forward, but instead of ground-truth codecs uses codecs, predicted and sampled autoregressively.
         Makes either max_size steps of autoregression or stops when end_token is predicted.
@@ -274,8 +310,33 @@ class TTSTransformer(nn.Module):
         device = phones.device
 
         # Your code here
-        raise NotImplementedError("TODO: assignment")
-        # ^^^^^^^^^^^^^^
+        # raise NotImplementedError("TODO: assignment")
+        speaker_embs = self.speaker_linear(speaker_embs).squeeze(dim=1)
 
+        phones_mask = torch.ones_like(phones, dtype=torch.bool, device=device)
+        codes = torch.full(
+            (batch_size, 1, self.subdecoder.n_codebooks),
+            start_token,
+            dtype=torch.long,
+            device=device,
+        )
+        for _ in range(max_size):
+            codes_mask = torch.ones(codes.size()[:2], dtype=torch.bool, device=device)
+            embeddings = self.encoder_decoder(
+                phones=phones,
+                phones_mask=phones_mask,
+                codes=codes,
+                codes_mask=codes_mask,
+                speaker_embs=speaker_embs,
+            )
+
+            next_codes = self.subdecoder.autoregressive_sampling(
+                embedding=embeddings[:, -1, :],  # [B, d]
+                sampling_fn=sampling_fn,
+            )  # [B, 1, N]
+            codes = torch.cat([codes, next_codes], dim=1)  # [B, L+1, N]
+            if end_token in next_codes:
+                break
+        # ^^^^^^^^^^^^^^
 
         return codes
